@@ -1,0 +1,6 @@
+[package]
+name = "ternary-game-theory"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Game theory with ternary strategies"
