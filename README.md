@@ -107,6 +107,13 @@ Part of the **SuperInstance** ternary computing ecosystem:
 - [`ternary-swarm`](https://crates.io/crates/ternary-swarm) — swarm intelligence with ternary decisions
 - [`ternary-control`](https://crates.io/crates/ternary-control) — ternary control theory
 
+## Known Limitations
+
+- **Pure-strategy Nash only**: `find_pure_nash()` only finds pure-strategy Nash equilibria. Games with only mixed-strategy equilibria will return an empty list with no indication that mixed equilibria exist.
+- **Best-response dynamics may not converge**: Iterated best-response has no convergence guarantee for general games; it can cycle indefinitely for games without pure Nash equilibria.
+- **Small strategy space**: With only 3 pure strategies per player, the space is too coarse for many real-world strategic situations. Games requiring fine-grained strategies are not well-represented.
+- **No support for n-player games**: The normal-form game representation assumes exactly 2 players. Extensive-form, repeated, and n-player games are not supported.
+
 ## License
 
 MIT
