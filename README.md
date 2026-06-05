@@ -117,3 +117,11 @@ Part of the **SuperInstance** ternary computing ecosystem:
 ## License
 
 MIT
+
+## See Also
+- **ternary-games** — related
+- **ternary-auction** — related
+- **ternary-market** — related
+- **ternary-voting** — related
+- **ternary-econ** — related
+
