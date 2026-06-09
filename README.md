@@ -1,115 +1,127 @@
 # ternary-game-theory
 
-**Game theory with ternary strategies — normal-form games, Nash equilibrium, cooperative games, Shapley values, and mechanism design.**
+Game theory with ternary strategies — normal-form games, Nash equilibrium, cooperative games, and mechanism design over {-1, 0, +1}.
 
-## Background
+## Why This Exists
 
-Classical game theory assumes players choose from binary strategies (cooperate/defect) or continuous action spaces. But many real-world decisions naturally fall into three categories: aggressive, neutral, and defensive; invest, hold, or divest; attack, observe, or retreat. The SuperInstance ecosystem models these as ternary strategies: −1 (negative/aggressive), 0 (neutral), +1 (positive/cooperative).
+Classical game theory is built on binary choices: cooperate or defect, bid or pass, attack or defend. Real strategic situations often have a middle ground — abstain, delay, hedge — that binary models can't represent without awkward hacks.
 
-`ternary-game-theory` provides a complete game-theoretic toolkit for ternary strategy spaces:
+Ternary game theory gives every player three strategies per move: negative, neutral, and positive. This maps naturally to scenarios like markets (sell/hold/buy), voting (against/abstain/for), and military decisions (retreat/hold/advance). The third strategy isn't just noise — it creates new equilibria, changes the price of anarchy, and enables richer cooperative structures.
 
-- **Normal-form games** with 3×3 payoff matrices and ternary best-response dynamics
-- **Nash equilibrium** computation (pure-strategy)
-- **Prisoner's Dilemma** variant with ternary strategies
-- **Cooperative games** with Shapley value computation and core membership
-- **Mechanism design** via Vickrey (second-price) auctions
-- **Welfare analysis** — social welfare maximization and price of anarchy
+## Core Concepts
+
+| Type | Meaning |
+|---|---|
+| `Ternary` | Strategy value: `Neg` (-1), `Zero` (0), `Pos` (+1) |
+| `NormalFormGame` | 3×3 payoff matrix for two players with ternary strategies |
+| `CooperativeGame` | Coalition game with bitmask values and Shapley allocation |
+| `VickreyAuction` | Second-price auction with ternary-structured valuations |
+
+## Quick Start
+
+```toml
+# Cargo.toml
+[dependencies]
+ternary-game-theory = "0.1"
+```
+
+```rust
+use ternary_game_theory::*;
+
+fn main() {
+    // Build a game with 3×3 payoff matrix
+    let game = NormalFormGame::new(
+        "Market Entry",
+        vec![
+            vec![(1.0, 1.0), (3.0, 0.0), (5.0, -1.0)],
+            vec![(0.0, 3.0), (2.0, 2.0), (4.0, 1.0)],
+            vec![(-1.0, 5.0), (1.0, 4.0), (3.0, 3.0)],
+        ],
+    );
+
+    // Find all pure-strategy Nash equilibria
+    let nash = game.find_pure_nash();
+    println!("Nash equilibria: {:?}", nash);
+
+    // Compute best-response dynamics from an initial state
+    let result = game.best_response_dynamics((Ternary::Zero, Ternary::Zero), 20);
+    println!("Converged to: {:?}", result);
+
+    // Analyze welfare
+    let (profile, welfare) = max_social_welfare(&game);
+    println!("Optimal welfare: {} at {:?}", welfare, profile);
+}
+```
+
+## API Overview
+
+### Normal-Form Games
+- `new(name, payoffs)` — create a 3×3 two-player game
+- `payoff(s1, s2) → (f64, f64)` — lookup payoffs for a strategy pair
+- `best_response_row(col_strategy)` / `best_response_col(row_strategy)` — best replies
+- `find_pure_nash() → Vec<(Ternary, Ternary)>` — enumerate pure Nash equilibria
+- `best_response_dynamics(initial, max_iters)` — iterative convergence
+- `minmax_row() → f64` — minmax value for the row player
+- `dominated_strategies_row() → Vec<Ternary>` — iterated dominance
+
+### Cooperative Games
+- `CooperativeGame::new(players, coalition_values)` — define a characteristic function
+- `shapley_values() → Vec<f64>` — fair allocation via Shapley value
+- `is_in_core(payoffs) → bool` — check if an allocation is in the core
+- `is_superadditive() → bool` — test superadditivity
+
+### Mechanism Design
+- `VickreyAuction::new(valuations)` — second-price sealed-bid auction
+- `resolve() → (winner, price)` — determine outcome
+- `is_truthful() → bool` — verify incentive compatibility
+
+### Welfare Analysis
+- `social_welfare(game, s1, s2)` — sum of payoffs
+- `max_social_welfare(game)` — find welfare-maximizing profile
+- `price_of_anarchy(game)` — ratio of optimal to worst Nash welfare
+
+### Built-in Games
+- `prisoners_dilemma_ternary()` — three-strategy Prisoner's Dilemma (Defect/Silent/Cooperate)
 
 ## How It Works
 
-### Normal-Form Games
+**Normal-form games** use a dense 3×3 payoff matrix indexed by ternary strategy values shifted to {0, 1, 2}. Nash equilibria are found by exhaustive best-response checking across all 9 strategy profiles. Best-response dynamics iterates alternating best replies until convergence or a maximum iteration limit.
 
-`NormalFormGame` stores a 3×3 payoff matrix indexed by `(Ternary, Ternary)` strategy pairs. Core methods:
+**Cooperative games** store coalition values in a bitmask-indexed vector (coalition `i` has value `coalition_values[i]`). Shapley values are computed by enumerating all player permutations and averaging marginal contributions — exact for up to ~10 players. Core membership is verified by checking every coalition's feasibility constraint.
 
-- **`best_response_row(col_strategy)`** — row player's optimal response
-- **`best_response_col(row_strategy)`** — column player's optimal response
-- **`find_pure_nash()`** — enumerate all pure-strategy Nash equilibria (strategy pairs where neither player can unilaterally improve)
-- **`best_response_dynamics(initial, max_iters)`** — iterate best responses until convergence or timeout
-- **`minmax_row()`** — compute the minmax value (row player's guaranteed payoff under optimal play)
-- **`dominated_strategies_row()`** — identify strictly dominated strategies
-
-### Ternary Prisoner's Dilemma
-
-`prisoners_dilemma_ternary()` constructs a three-strategy variant:
-
-| | Defect (−1) | Silent (0) | Cooperate (+1) |
-|---|---|---|---|
-| **Defect** | (1, 1) | (3, 0) | (5, −1) |
-| **Silent** | (0, 3) | (2, 2) | (4, 1) |
-| **Cooperate** | (−1, 5) | (1, 4) | (3, 3) |
-
-Defect remains the dominant strategy (highest payoff against every column), but mutual cooperation (3, 3) Pareto-dominates mutual defection (1, 1). The "Silent" middle option adds strategic richness absent from the binary version.
-
-### Cooperative Games
-
-`CooperativeGame` models n-player games with characteristic function values (bitmask-indexed). Methods:
-
-- **`shapley_values()`** — compute Shapley values by enumerating all player permutations, measuring each player's marginal contribution across all orderings
-- **`is_in_core(payoffs)`** — check if a payoff vector is in the core (group rationality + individual rationality)
-- **`is_superadditive()`** — verify that coalition merging never reduces value
-
-### Mechanism Design
-
-`VickreyAuction` implements a second-price sealed-bid auction where the highest bidder wins but pays the second-highest bid. This mechanism is **incentive-compatible** — truthful bidding is a dominant strategy.
-
-### Welfare Analysis
-
-- **`social_welfare(game, s1, s2)`** — sum of payoffs for a strategy profile
-- **`max_social_welfare(game)`** — find the welfare-maximizing profile
-- **`price_of_anarchy(game)`** — ratio of optimal welfare to worst Nash equilibrium welfare
-
-## Experimental Results
-
-The test suite (20+ tests) validates:
-
-- **Payoff lookup** — correct indexing by ternary strategies
-- **Best responses** — row and column players identify optimal strategies
-- **Nash equilibria** — found correctly for identity game and Prisoner's Dilemma
-- **Best-response dynamics** — terminates (converges or reaches max iterations)
-- **Minmax** — correct value for zero-sum games
-- **Dominated strategies** — correctly identified (or correctly found absent)
-- **Shapley values** — exact computation matches theoretical values (e.g., player 0: 4.0, player 1: 6.0 for a 2-player game with coalition values [0, 3, 5, 10])
-- **Core membership** — (4, 6) is in core; (2, 2) is not
-- **Superadditivity** — correctly verified
-- **Vickrey auction** — winner and second-price computed correctly; single-bidder edge case handled
-- **Price of anarchy** — finite or NaN (no pure Nash) as expected
-
-## Impact
-
-The ternary strategy space has richer structure than binary games. The third option (Silent/Neutral) introduces:
-
-- **Partial cooperation** — a middle ground between full defection and full cooperation
-- **More equilibria** — the 3×3 payoff matrix can support up to 3 pure Nash equilibria
-- **Nuanced welfare analysis** — the price of anarchy can distinguish between equilibria that the binary model collapses
-
-The Shapley value implementation enables fair value allocation in cooperative ternary systems — assigning credit for coalition outcomes based on marginal contributions.
+**Welfare analysis** computes the price of anarchy as the ratio between the socially optimal outcome and the worst Nash equilibrium welfare, providing a measure of efficiency loss from decentralized decision-making.
 
 ## Use Cases
 
-1. **Multi-agent resource allocation** — Rooms in a ternary fleet compete for shared resources. Each room's strategy (−1: hoard, 0: fair share, +1: share generously) determines payoffs. `find_pure_nash()` identifies stable allocation profiles.
+- **Market simulation** — model sell/hold/buy strategies across multiple agents, compute equilibria and welfare
+- **Voting system design** — analyze ternary voting (against/abstain/for) for Nash equilibria and price of anarchy
+- **Resource allocation** — use Shapley values to fairly divide gains from cooperation in ternary-strategy settings
 
-2. **Fleet coordination games** — Rooms must coordinate actions (e.g., all upgrade simultaneously). The ternary Prisoner's Dilemma models the temptation to delay (defect), the safety of waiting (silent), and the benefit of coordination (cooperate). `price_of_anarchy()` quantifies the cost of miscoordination.
+## Ecosystem
 
-3. **Fair credit distribution** — A group of rooms achieves a collective outcome. `shapley_values()` allocates credit fairly based on each room's marginal contribution across all possible coalition orderings.
+Part of the **SuperInstance** ternary computing ecosystem:
 
-4. **Incentive-compatible auctions** — Fleet resources (compute time, bandwidth) are allocated via `VickreyAuction`. Truthful bidding is optimal, so rooms have no incentive to misrepresent their valuations.
+- [`ternary`](https://crates.io/crates/ternary) — core trit types and balanced ternary arithmetic
+- [`ternary-game-theory`](https://crates.io/crates/ternary-game-theory) — this crate
+- [`ternary-constraint`](https://crates.io/crates/ternary-constraint) — constraint satisfaction for ternary variables
+- [`ternary-swarm`](https://crates.io/crates/ternary-swarm) — swarm intelligence with ternary decisions
+- [`ternary-control`](https://crates.io/crates/ternary-control) — ternary control theory
 
-5. **Coalition formation** — Rooms form coalitions to achieve goals. `is_superadditive()` checks whether merging coalitions always helps, and `is_in_core()` verifies that no subgroup has incentive to break away.
+## Known Limitations
 
-## Open Questions
+- **Pure-strategy Nash only**: `find_pure_nash()` only finds pure-strategy Nash equilibria. Games with only mixed-strategy equilibria will return an empty list with no indication that mixed equilibria exist.
+- **Best-response dynamics may not converge**: Iterated best-response has no convergence guarantee for general games; it can cycle indefinitely for games without pure Nash equilibria.
+- **Small strategy space**: With only 3 pure strategies per player, the space is too coarse for many real-world strategic situations. Games requiring fine-grained strategies are not well-represented.
+- **No support for n-player games**: The normal-form game representation assumes exactly 2 players. Extensive-form, repeated, and n-player games are not supported.
 
-- **Mixed-strategy equilibria:** The current implementation finds only pure-strategy Nash equilibria. Should a future version support mixed strategies (probability distributions over ternary actions) and compute Nash equilibria via linear complementarity?
-- **Repeated games:** The one-shot game model doesn't capture reputation, retaliation, or learning. Should the crate support iterated games with history-dependent strategies (tit-for-tat on ternary actions)?
-- **N-player generalization:** Normal-form games are limited to 2 players. Can the framework extend to n-player games with ternary strategy spaces?
+## License
 
-## Connection to Oxide Stack
+MIT
 
-`ternary-game-theory` provides the strategic reasoning layer:
+## See Also
+- **ternary-games** — related
+- **ternary-auction** — related
+- **ternary-market** — related
+- **ternary-voting** — related
+- **ternary-econ** — related
 
-- **`ternary-voting`** — voting mechanisms can be analyzed as games (strategic voting, manipulation resistance)
-- **`ternary-blockchain`** — consensus protocols are games (miners choose strategies: honest mining, selfish mining, or withholding)
-- **`ternary-chaos`** — game dynamics (best-response iteration) can exhibit chaotic behavior, analyzable with chaos detection tools
-- **`ternary-channel`** — communication channels transport strategic decisions between players
-- **`ternary-event`** — game outcomes are published as events for observability
-
-The ternary strategy space (−1, 0, +1) aligns with the ecosystem's core representation, ensuring that game-theoretic analysis and fleet operations share a common language.
